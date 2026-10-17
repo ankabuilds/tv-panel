@@ -72,7 +72,6 @@ var PLAT=[
   {key:'tvplus',  re:/^(tv\+|turkcell)/i, pkg:'com.turkcell.ott',                  open:"TV+'ta aç"}
 ];
 var IMG='https://image.tmdb.org/t/p/';
-var IS_ANDROID=/Android/i.test(navigator.userAgent);
 
 function $(s){return document.querySelector(s)}
 var store={
@@ -239,14 +238,21 @@ function trailer(x){
     return v?v.key:null;})}
   return get('tr-TR').then(function(k){return k||get('en-US')});
 }
+// Uygulamayı açmayı dener; 2 sn içinde sayfa arka plana geçmezse açılamadı sayılır
+function tryOpen(url,onFail){
+  var t=setTimeout(function(){if(!document.hidden)onFail()},2000);
+  function h(){if(document.hidden){clearTimeout(t);document.removeEventListener('visibilitychange',h)}}
+  document.addEventListener('visibilitychange',h);
+  try{location.href=url}catch(e){clearTimeout(t);onFail()}
+}
 function launch(pkg){
-  if(!IS_ANDROID){toast('Bu düğme TV\'de çalışır');return}
-  location.href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LEANBACK_LAUNCHER;package='+pkg+';end';
+  tryOpen('intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LEANBACK_LAUNCHER;package='+pkg+';end',
+    function(){toast('Uygulama bu tarayıcıdan açılamadı')});
 }
 function openYT(key){
   var web='https://www.youtube.com/watch?v='+key;
-  if(!IS_ANDROID){window.open(web,'_blank');return}
-  location.href='intent://www.youtube.com/watch?v='+key+'#Intent;scheme=https;package=com.google.android.youtube.tv;S.browser_fallback_url='+encodeURIComponent(web)+';end';
+  tryOpen('intent://www.youtube.com/watch?v='+key+'#Intent;scheme=https;package=com.google.android.youtube.tv;S.browser_fallback_url='+encodeURIComponent(web)+';end',
+    function(){location.href=web});
 }
 function closeModal(){$('#modal').hidden=true;focusCard(cur.r,cur.c)}
 function openModal(x){
