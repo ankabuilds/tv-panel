@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TV Panel</title>
+<style>
+:root{--bg:#0b0d12;--fg:#f2f4f8;--mut:#9aa3b2;--acc:#ffb020;--card:#161a22}
+*{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}
+html,body{background:var(--bg);color:var(--fg);font-family:system-ui,Roboto,"Segoe UI",sans-serif;overflow:hidden;height:100%}
+.mut{color:var(--mut);font-size:1vw}
+#hero{position:fixed;left:0;right:0;top:0;height:50vh;background-size:cover;background-position:center 20%}
+#hero::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,var(--bg) 22%,rgba(11,13,18,.55) 55%,rgba(11,13,18,.15)),linear-gradient(0deg,var(--bg),transparent 45%)}
+#info{position:absolute;z-index:1;left:4vw;top:13vh;width:46vw}
+#title{font-size:2.6vw;line-height:1.15;margin-bottom:.6vw}
+#meta{color:var(--mut);font-size:1.1vw;margin-bottom:.8vw}
+#desc{font-size:1.1vw;line-height:1.45;color:#d6dbe4;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+#prov{margin-top:1vw;display:flex;gap:.6vw;align-items:center;min-height:2.4vw}
+#prov img{height:2.4vw;border-radius:.4vw}
+#top{position:fixed;z-index:2;top:3vh;left:4vw;right:4vw;display:flex;justify-content:space-between;align-items:flex-start}
+#clock{font-size:2.4vw;font-weight:600;line-height:1}
+#date{color:var(--mut);font-size:1vw;margin-top:.3vw}
+#wx{display:flex;gap:1.6vw;text-align:center;font-size:.95vw;color:#c9d0db;background:rgba(11,13,18,.55);padding:.6vw 1vw;border-radius:.8vw;text-shadow:0 0 .4vw #000}
+#wx .now{font-size:2vw;color:var(--fg)}
+#wx .big{font-size:1.5vw}
+#rows{position:fixed;top:50vh;bottom:0;left:0;right:0;overflow:hidden;padding:0 4vw}
+.row{padding-top:1vh}
+.row h2{font-size:1.25vw;font-weight:600;color:#e8ecf2}
+.track{position:relative;display:flex;gap:1vw;overflow:hidden;padding:.8vw .8vw;scroll-behavior:smooth}
+.card{flex:0 0 9vw;outline:none;border-radius:.5vw;background:var(--card);transition:transform .15s;position:relative;cursor:pointer}
+.card img{width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:.5vw;display:block}
+.card:focus{transform:scale(1.08);box-shadow:0 0 0 .25vw var(--acc)}
+.rt{position:absolute;top:.3vw;right:.3vw;background:rgba(0,0,0,.75);font-size:.8vw;padding:.1vw .35vw;border-radius:.3vw}
+.fav{position:absolute;top:.25vw;left:.4vw;font-size:1.1vw;color:#ff5470;text-shadow:0 0 .3vw #000}
+#modal,#setup{position:fixed;inset:0;z-index:5;background:rgba(5,6,9,.85);display:flex;align-items:center;justify-content:center}
+.box{background:#151922;border-radius:1vw;padding:2.5vw;width:56vw;text-align:center}
+.box h3{font-size:1.8vw;margin-bottom:1.5vw}
+.box p{font-size:1.05vw;color:#c9d0db;line-height:1.5;margin-bottom:1.2vw;text-align:left}
+#mbtns{display:flex;gap:1vw;justify-content:center;flex-wrap:wrap}
+button{font:inherit;font-size:1.2vw;padding:.8vw 1.6vw;border-radius:.6vw;border:0;background:#262c38;color:var(--fg);outline:none;cursor:pointer}
+button:focus{background:var(--acc);color:#111}
+#k{width:100%;font-size:1.2vw;padding:.8vw;border-radius:.5vw;border:.15vw solid #333a48;background:#0e1118;color:var(--fg);margin-bottom:1.2vw}
+#toast{position:fixed;z-index:9;bottom:4vh;left:50%;transform:translateX(-50%);background:#222836;padding:.8vw 1.6vw;border-radius:.6vw;font-size:1.1vw;opacity:0;transition:opacity .3s;pointer-events:none}
+#attr{position:fixed;right:1vw;bottom:.6vh;font-size:.65vw;color:#4d5565}
+</style>
+</head>
+<body>
+<div id="hero"><div id="info"><h1 id="title"></h1><div id="meta"></div><p id="desc"></p><div id="prov"></div></div></div>
+<div id="top"><div><div id="clock"></div><div id="date"></div></div><div id="wx"></div></div>
+<div id="rows"></div>
+
+<div id="modal" hidden><div class="box"><h3 id="mtitle"></h3><div id="mbtns"></div></div></div>
+
+<div id="setup" hidden><div class="box">
+  <h3>TV Panel kurulumu</h3>
+  <p>themoviedb.org hesabındaki <b>API Key</b> (32 karakter) ya da <b>API Read Access Token</b> değerini yapıştır. Anahtar sadece bu cihazda saklanır.</p>
+  <input id="k" type="text" autocomplete="off" spellcheck="false" placeholder="TMDB anahtarı">
+  <button id="save">Kaydet</button>
+</div></div>
+
+<div id="toast"></div>
+<div id="attr">Film/dizi verisi TMDB'den alınır (TMDB tarafından onaylanmamıştır) · Hava: Open-Meteo</div>
+
+<script>
+(function(){
+// ---- Ayarlar ----
+var LAT=41.01, LON=28.97; // İstanbul
+var PLAT=[
+  {key:'netflix', re:/^netflix/i,        pkg:'com.netflix.ninja',                 open:"Netflix'te aç"},
+  {key:'prime',   re:/prime video/i,      pkg:'com.amazon.amazonvideo.livingroom', open:"Prime Video'da aç"},
+  {key:'tvplus',  re:/^(tv\+|turkcell)/i, pkg:'com.turkcell.ott',                  open:"TV+'ta aç"}
+];
+var IMG='https://image.tmdb.org/t/p/';
+var IS_ANDROID=/Android/i.test(navigator.userAgent);
+
+function $(s){return document.querySelector(s)}
+var store={
+  get:function(k,d){try{var v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set:function(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+
+// Anahtar: kayıtlı, ya da adresin sonuna #k=ANAHTAR eklenerek bir kez verilir
+function clearHash(){try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}
+var KEY=store.get('tmdbKey','');
+if(location.hash.indexOf('#k=')===0){
+  KEY=decodeURIComponent(location.hash.slice(3)).trim(); store.set('tmdbKey',KEY);
+  clearHash();
+}
+var FORCE_SETUP = location.hash==='#ayar';
+
+function toast(m){var t=$('#toast');t.textContent=m;t.style.opacity=1;clearTimeout(toast.t);toast.t=setTimeout(function(){t.style.opacity=0},4000)}
+
+function tmdb(path,params){
+  params=params||{};
+  var u=new URL('https://api.themoviedb.org/3'+path);
+  if(!('language' in params)) params.language='tr-TR';
+  Object.keys(params).forEach(function(k){u.searchParams.set(k,params[k])});
+  var h={accept:'application/json'};
+  if(KEY.indexOf('eyJ')===0) h.Authorization='Bearer '+KEY; else u.searchParams.set('api_key',KEY);
+  return fetch(u.toString(),{headers:h}).then(function(r){if(!r.ok)throw new Error('TMDB '+r.status);return r.json()});
+}
+
+// ---- Saat & hava ----
+function tick(){
+  var d=new Date();
+  $('#clock').textContent=d.toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'});
+  $('#date').textContent=d.toLocaleDateString('tr-TR',{weekday:'long',day:'numeric',month:'long'});
+}
+function WX(c){
+  return c===0?['☀️','Açık']:c<=2?['⛅','Parçalı bulutlu']:c===3?['☁️','Kapalı']:c<=48?['🌫️','Sisli']:
+    c<=57?['🌦️','Çisenti']:c<=67?['🌧️','Yağmurlu']:c<=77?['❄️','Karlı']:c<=82?['🌧️','Sağanak']:c<=86?['🌨️','Kar sağanağı']:['⛈️','Fırtına'];
+}
+function weather(){
+  var u='https://api.open-meteo.com/v1/forecast?latitude='+LAT+'&longitude='+LON+
+    '&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4';
+  fetch(u).then(function(r){return r.json()}).then(function(j){
+    var n=WX(j.current.weather_code);
+    var h='<div><div class="now">'+n[0]+' '+Math.round(j.current.temperature_2m)+'°</div><div>'+n[1]+'</div></div>';
+    for(var i=1;i<4;i++){
+      var d=new Date(j.daily.time[i]+'T12:00:00'), w=WX(j.daily.weather_code[i]);
+      h+='<div><div>'+d.toLocaleDateString('tr-TR',{weekday:'short'})+'</div><div class="big">'+w[0]+'</div><div>'+
+        Math.round(j.daily.temperature_2m_max[i])+'° / '+Math.round(j.daily.temperature_2m_min[i])+'°</div></div>';
+    }
+    $('#wx').innerHTML=h;
+  }).catch(function(){});
+}
+
+// ---- Platformlar ----
+var provIds=[];
+function loadProviders(){
+  return Promise.all([tmdb('/watch/providers/tv',{watch_region:'TR'}),tmdb('/watch/providers/movie',{watch_region:'TR'})]).then(function(a){
+    provIds=[];
+    (a[0].results||[]).concat(a[1].results||[]).forEach(function(p){
+      if(PLAT.some(function(x){return x.re.test(p.provider_name)}) && provIds.indexOf(p.provider_id)<0) provIds.push(p.provider_id);
+    });
+  });
+}
+function P(o){
+  var b=provIds.length?{watch_region:'TR',with_watch_providers:provIds.join('|'),with_watch_monetization_types:'flatrate|ads'}:{};
+  for(var k in o) b[k]=o[k];
+  return b;
+}
+function iso(days){return new Date(Date.now()-days*864e5).toISOString().slice(0,10)}
+function norm(x,type){
+  return {id:x.id,type:x.media_type||type,title:x.title||x.name,date:(x.release_date||x.first_air_date||'').slice(0,4),
+    poster:x.poster_path,backdrop:x.backdrop_path,vote:x.vote_average,ov:x.overview};
+}
+function list(path,type,params){
+  return tmdb(path,params).then(function(j){
+    return (j.results||[]).filter(function(x){return x.poster_path && x.media_type!=='person'}).map(function(x){return norm(x,type)});
+  });
+}
+
+// ---- Favoriler & öneriler ----
+function fk(x){return x.type+':'+x.id}
+function favs(){return store.get('favs',[])}
+function isFav(x){return favs().indexOf(fk(x))>=0}
+function forYou(){
+  var f=favs();
+  if(!f.length){ROWS[0].t='Bugün trend — beğendiklerini ♥ ile işaretledikçe sana göre değişir';return list('/trending/all/day','all',{})}
+  ROWS[0].t='Senin için — beğendiklerine benzer';
+  var seen={}; f.forEach(function(k){seen[k]=1});
+  return Promise.all(f.slice(-4).map(function(k){var p=k.split(':');return list('/'+p[0]+'/'+p[1]+'/recommendations',p[0],{}).catch(function(){return []})}))
+    .then(function(res){
+      var out=[];
+      for(var i=0;i<20;i++) res.forEach(function(a){var x=a[i];if(x&&!seen[fk(x)]){seen[fk(x)]=1;out.push(x)}});
+      return out;
+    });
+}
+
+var ROWS=[
+  {t:'Senin için', f:forYou},
+  {t:'Yeni çıkan diziler',       f:function(){return list('/discover/tv','tv',P({sort_by:'popularity.desc','first_air_date.gte':iso(90)}))}},
+  {t:'Platformlarına yeni gelen filmler', f:function(){return list('/discover/movie','movie',P({sort_by:'popularity.desc','primary_release_date.gte':iso(150)}))}},
+  {t:'Şu an popüler diziler',    f:function(){return list('/discover/tv','tv',P({sort_by:'popularity.desc'}))}},
+  {t:'Şu an popüler filmler',    f:function(){return list('/discover/movie','movie',P({sort_by:'popularity.desc'}))}},
+  {t:'En çok beğenilen diziler', f:function(){return list('/discover/tv','tv',P({sort_by:'vote_average.desc','vote_count.gte':800}))}},
+  {t:'En çok beğenilen filmler', f:function(){return list('/discover/movie','movie',P({sort_by:'vote_average.desc','vote_count.gte':2000}))}},
+  {t:'Dünyada bu hafta trend',   f:function(){return list('/trending/all/week','all',{})}}
+];
+
+// ---- Çizim ----
+var data=ROWS.map(function(){return []}), pos=[], cur={r:0,c:0};
+ROWS.forEach(function(R,i){
+  var s=document.createElement('section');s.className='row';s.id='row'+i;s.innerHTML='<h2></h2><div class="track"></div>';
+  $('#rows').appendChild(s);
+});
+function cardHTML(x,r,c){
+  return '<div class="card" tabindex="-1" data-r="'+r+'" data-c="'+c+'"><img loading="lazy" src="'+IMG+'w342'+x.poster+'" alt="">'+
+    (x.vote?'<span class="rt">★ '+x.vote.toFixed(1)+'</span>':'')+(isFav(x)?'<span class="fav">♥</span>':'')+'</div>';
+}
+function renderRow(r){
+  var el=document.getElementById('row'+r);
+  el.querySelector('h2').textContent=ROWS[r].t;
+  el.querySelector('.track').innerHTML=data[r].map(function(x,c){return cardHTML(x,r,c)}).join('');
+  el.hidden=!data[r].length;
+}
+function rowsWith(){var o=[];data.forEach(function(d,i){if(d.length)o.push(i)});return o}
+
+function focusCard(r,c){
+  if(!data[r]||!data[r].length) return;
+  c=Math.max(0,Math.min(c,data[r].length-1)); cur={r:r,c:c}; pos[r]=c;
+  var rowEl=document.getElementById('row'+r), track=rowEl.querySelector('.track');
+  var el=track.querySelector('[data-c="'+c+'"]'); if(!el) return;
+  el.focus({preventScroll:true});
+  $('#rows').scrollTop=rowEl.offsetTop;
+  track.scrollLeft=Math.max(0,el.offsetLeft-track.clientWidth/2+el.clientWidth/2);
+  hero(data[r][c]);
+}
+
+var pCache={}, hT;
+function providersFor(x){
+  var k=fk(x); if(pCache[k]) return Promise.resolve(pCache[k]);
+  return tmdb('/'+x.type+'/'+x.id+'/watch/providers',{}).then(function(j){
+    var tr=(j.results&&j.results.TR)||{}; pCache[k]=(tr.flatrate||[]).concat(tr.ads||[]); return pCache[k];
+  });
+}
+function hero(x){
+  $('#hero').style.backgroundImage=x.backdrop?'url('+IMG+'w1280'+x.backdrop+')':'none';
+  $('#title').textContent=x.title;
+  $('#meta').textContent=[x.type==='tv'?'Dizi':'Film',x.date,x.vote?'★ '+x.vote.toFixed(1):''].filter(Boolean).join(' · ');
+  $('#desc').textContent=x.ov||'Türkçe özet bulunmuyor.';
+  $('#prov').innerHTML='';
+  clearTimeout(hT);
+  hT=setTimeout(function(){
+    providersFor(x).then(function(ps){
+      if(data[cur.r][cur.c]!==x) return;
+      $('#prov').innerHTML=ps.length?ps.map(function(p){return '<img src="'+IMG+'w92'+p.logo_path+'" alt="'+p.provider_name+'" title="'+p.provider_name+'">'}).join('')
+        :'<span class="mut">Türkiye\'de abonelikle izlenebileceği bir platform bulunamadı</span>';
+    }).catch(function(){});
+  },300);
+}
+
+// ---- Detay penceresi ----
+function trailer(x){
+  function get(lang){return tmdb('/'+x.type+'/'+x.id+'/videos',{language:lang}).then(function(j){
+    var r=j.results||[]; var v=r.filter(function(v){return v.site==='YouTube'&&v.type==='Trailer'})[0]||r.filter(function(v){return v.site==='YouTube'})[0];
+    return v?v.key:null;})}
+  return get('tr-TR').then(function(k){return k||get('en-US')});
+}
+function launch(pkg){
+  if(!IS_ANDROID){toast('Bu düğme TV\'de çalışır');return}
+  location.href='intent:#Intent;action=android.intent.action.MAIN;category=android.intent.category.LEANBACK_LAUNCHER;package='+pkg+';end';
+}
+function openYT(key){
+  var web='https://www.youtube.com/watch?v='+key;
+  if(!IS_ANDROID){window.open(web,'_blank');return}
+  location.href='intent://www.youtube.com/watch?v='+key+'#Intent;scheme=https;package=com.google.android.youtube.tv;S.browser_fallback_url='+encodeURIComponent(web)+';end';
+}
+function closeModal(){$('#modal').hidden=true;focusCard(cur.r,cur.c)}
+function openModal(x){
+  var m=$('#modal'),btns=$('#mbtns'); m.hidden=false; $('#mtitle').textContent=x.title;
+  btns.innerHTML='<span class="mut">Yükleniyor…</span>';
+  Promise.all([providersFor(x).catch(function(){return []}),trailer(x).catch(function(){return null})]).then(function(a){
+    if(m.hidden) return;
+    var b=[],done={};
+    a[0].forEach(function(p){var pl=PLAT.filter(function(q){return q.re.test(p.provider_name)})[0];
+      if(pl&&!done[pl.key]){done[pl.key]=1;b.push({t:'▶ '+pl.open,fn:function(){launch(pl.pkg)}})}});
+    if(a[1]) b.push({t:'🎬 Fragman',fn:function(){openYT(a[1])}});
+    b.push({t:isFav(x)?'♥ Favorilerden çıkar':'♡ Favorilere ekle',fn:function(){closeModal();toggleFav(x)}});
+    b.push({t:'Kapat',fn:closeModal});
+    btns.innerHTML='';
+    b.forEach(function(o){var e=document.createElement('button');e.textContent=o.t;e.onclick=o.fn;btns.appendChild(e)});
+    btns.firstChild.focus();
+  });
+}
+function toggleFav(x){
+  var f=favs(),k=fk(x),added=f.indexOf(k)<0;
+  f=added?f.concat(k).slice(-30):f.filter(function(y){return y!==k});
+  store.set('favs',f);
+  toast(added?'Favorilere eklendi, "Senin için" satırı güncelleniyor':'Favorilerden çıkarıldı');
+  for(var r=1;r<data.length;r++) renderRow(r);
+  forYou().then(function(d){data[0]=d.slice(0,20)}).catch(function(){}).then(function(){renderRow(0);focusCard(cur.r,cur.c)});
+}
+
+// ---- Kumanda / klavye ----
+function isBack(e){return e.key==='Escape'||e.key==='Backspace'||e.key==='GoBack'||e.key==='BrowserBack'}
+document.addEventListener('keydown',function(e){
+  if(!$('#setup').hidden) return;
+  if(!$('#modal').hidden){
+    var bs=Array.prototype.slice.call($('#mbtns').querySelectorAll('button')), i=bs.indexOf(document.activeElement);
+    if(e.key==='ArrowRight'||e.key==='ArrowDown'){if(bs[i+1])bs[i+1].focus()}
+    else if(e.key==='ArrowLeft'||e.key==='ArrowUp'){if(i>0)bs[i-1].focus()}
+    else if(isBack(e)) closeModal();
+    else return;
+    e.preventDefault(); return;
+  }
+  var rs=rowsWith(), ri=rs.indexOf(cur.r);
+  if(e.key==='ArrowRight') focusCard(cur.r,cur.c+1);
+  else if(e.key==='ArrowLeft') focusCard(cur.r,cur.c-1);
+  else if(e.key==='ArrowDown'){if(ri<rs.length-1)focusCard(rs[ri+1],pos[rs[ri+1]]||0)}
+  else if(e.key==='ArrowUp'){if(ri>0)focusCard(rs[ri-1],pos[rs[ri-1]]||0)}
+  else if(e.key==='Enter'||e.keyCode===23){if(data[cur.r][cur.c])openModal(data[cur.r][cur.c])}
+  else return;
+  e.preventDefault();
+});
+$('#rows').addEventListener('click',function(e){
+  var c=e.target.closest('.card'); if(!c) return;
+  focusCard(+c.dataset.r,+c.dataset.c); openModal(data[cur.r][cur.c]);
+});
+
+// ---- Yükleme ----
+function loadAll(){
+  return loadProviders().then(function(){
+    return Promise.all(ROWS.map(function(R){return R.f().catch(function(){return []})}));
+  }).then(function(res){
+    data=res.map(function(a){return a.slice(0,20)});
+    ROWS.forEach(function(R,i){renderRow(i)});
+    var rs=rowsWith(); if(!rs.length){toast('İçerik yüklenemedi');return}
+    focusCard(rs.indexOf(cur.r)>=0?cur.r:rs[0],cur.c);
+  }).catch(function(){toast('TMDB\'ye bağlanılamadı. Anahtarı kontrol et (adresin sonuna #ayar ekle).')});
+}
+function setup(){
+  $('#setup').hidden=false; $('#k').value=KEY; $('#k').focus();
+  $('#save').onclick=function(){
+    var v=$('#k').value.trim(); if(!v) return;
+    KEY=v; store.set('tmdbKey',v); $('#setup').hidden=true;
+    clearHash(); loadAll();
+  };
+}
+
+tick(); setInterval(tick,15000);
+weather(); setInterval(weather,30*60*1000);
+if(!KEY||FORCE_SETUP) setup(); else loadAll();
+setInterval(function(){if(KEY&&$('#modal').hidden)loadAll()},6*60*60*1000);
+})();
+</script>
+</body>
+</html>
